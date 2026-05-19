@@ -167,9 +167,8 @@ static void replayHistory(int newFd, MessageHistory& history){
 //  accept() completes the TCP handshake.
 //
 //  DSA additions:
-//    • Registers the client in ClientManager (hash table)
-//    • Replays MessageHistory to the new client
-//  — Zain's networking logic preserved exactly —
+//    - Registers the client in ClientManager (hash table)
+//    - Replays MessageHistory to the new client  
 // ============================================================
 static void handleNewConnection(int listenerFd, std::vector<pollfd>& pfds, ClientManager& clients, MessageHistory& history){
     sockaddr_storage clientAddr{};
@@ -298,7 +297,7 @@ static void processConnections(int listenerFd, std::vector<pollfd>& pfds, Client
 //  and passed down into every handler.
 // ============================================================
 void runServer(){
-    // ── Zain's networking setup ──
+    // networking setup
     int listenerFd = createListenerSocket();
     if (listenerFd == -1) {
         std::cerr << "Failed to create listener socket. Exiting.\n";
@@ -314,7 +313,7 @@ void runServer(){
     MessageHistory history(20);  // remembers last 20 broadcast messages
 
     std::cout << "pollserver: waiting for connections on port " << PORT << "...\n";
-    std::cout << "[DSA] ClientManager and MessageHistory initialised\n";
+    std::cout << "ClientManager and MessageHistory initialised\n";
 
     // main event loop
     while (true) {
