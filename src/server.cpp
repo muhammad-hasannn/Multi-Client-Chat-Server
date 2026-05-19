@@ -8,7 +8,7 @@
 //  Port:           9034
 // ============================================================
 
-// ── System headers (Linux / POSIX) ──────────────────────────
+// Header only available in Linux
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -17,14 +17,14 @@
 #include <poll.h>
 #include <unistd.h>
 
-// ── Standard C++ headers ────────────────────────────────────
-#include <iostream>      // std::cout, std::cerr
-#include <vector>        // std::vector
-#include <string>        // std::string
-#include <cstring>       // memset
-#include <cstdlib>       // exit()
+// C++ Headers
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cstring>
+#include <cstdlib>
 
-// ── Constants ───────────────────────────────────────────────
+// constants
 static constexpr const char* PORT          = "9034";
 static constexpr int         BUFFER_SIZE   = 256;
 static constexpr int         MAX_CLIENTS   = 500;   // reserve hint for vector
@@ -36,21 +36,17 @@ static constexpr int         BACKLOG       = 10;    // max pending connections
 //  into a human-readable IP string like "192.168.1.5".
 //  Works for both address families transparently.
 // ============================================================
-static std::string addressToString(sockaddr_storage& addr)
-{
+static std::string addressToString(sockaddr_storage& addr){
     char buf[INET6_ADDRSTRLEN];
 
-    switch (addr.ss_family)
-    {
-        case AF_INET:
-        {
+    switch (addr.ss_family){
+        case AF_INET:{
             // IPv4 — cast to sockaddr_in and grab sin_addr
             auto* sa4 = reinterpret_cast<sockaddr_in*>(&addr);
             inet_ntop(AF_INET, &sa4->sin_addr, buf, sizeof buf);
             break;
         }
-        case AF_INET6:
-        {
+        case AF_INET6:{
             // IPv6 — cast to sockaddr_in6 and grab sin6_addr
             auto* sa6 = reinterpret_cast<sockaddr_in6*>(&addr);
             inet_ntop(AF_INET6, &sa6->sin6_addr, buf, sizeof buf);
@@ -59,7 +55,6 @@ static std::string addressToString(sockaddr_storage& addr)
         default:
             return "(unknown address family)";
     }
-
     return std::string(buf);
 }
 
@@ -69,8 +64,7 @@ static std::string addressToString(sockaddr_storage& addr)
 //  Steps: getaddrinfo → socket → setsockopt → bind → listen
 //  Returns the file descriptor, or -1 on failure.
 // ============================================================
-static int createListenerSocket()
-{
+static int createListenerSocket(){
     addrinfo hints{};                  // zero-initialize with {} — C++ style
     hints.ai_family   = AF_INET;       // IPv4
     hints.ai_socktype = SOCK_STREAM;   // TCP (reliable, ordered)
@@ -78,8 +72,7 @@ static int createListenerSocket()
 
     addrinfo* results = nullptr;
     int rv = getaddrinfo(nullptr, PORT, &hints, &results);
-    if (rv != 0)
-    {
+    if (rv != 0){
         std::cerr << "getaddrinfo error: " << gai_strerror(rv) << "\n";
         exit(1);
     }
@@ -87,8 +80,7 @@ static int createListenerSocket()
     int listenerFd = -1;
     int yes = 1;
 
-    for (addrinfo* p = results; p != nullptr; p = p->ai_next)
-    {
+    for (addrinfo* p = results; p != nullptr; p = p->ai_next){
         listenerFd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (listenerFd < 0)
             continue;   // try next address
@@ -96,8 +88,7 @@ static int createListenerSocket()
         // Allow reuse of port immediately after server restart
         setsockopt(listenerFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
 
-        if (bind(listenerFd, p->ai_addr, p->ai_addrlen) < 0)
-        {
+        if (bind(listenerFd, p->ai_addr, p->ai_addrlen) < 0){
             close(listenerFd);
             continue;   // try next address
         }
@@ -123,16 +114,14 @@ static int createListenerSocket()
 //  removeConnection — removes a fd by swapping with the last
 //                     element (O(1) removal from a vector).
 // ============================================================
-static void addConnection(std::vector<pollfd>& pfds, int fd)
-{
+static void addConnection(std::vector<pollfd>& pfds, int fd){
     pollfd entry{};
     entry.fd     = fd;
     entry.events = POLLIN;   // notify us when data arrives
     pfds.push_back(entry);
 }
 
-static void removeConnection(std::vector<pollfd>& pfds, int index)
-{
+static void removeConnection(std::vector<pollfd>& pfds, int index){
     // Swap with the last element, then pop — avoids shifting the whole array
     pfds[index] = pfds.back();
     pfds.pop_back();
@@ -144,26 +133,20 @@ static void removeConnection(std::vector<pollfd>& pfds, int index)
 //  meaning a new client is knocking. accept() completes the
 //  TCP handshake and gives us a dedicated fd for that client.
 // ============================================================
-static void handleNewConnection(int listenerFd, std::vector<pollfd>& pfds)
-{
+static void handleNewConnection(int listenerFd, std::vector<pollfd>& pfds){
     sockaddr_storage clientAddr{};
     socklen_t addrLen = sizeof clientAddr;
 
-    int newFd = accept(listenerFd,
-                       reinterpret_cast<sockaddr*>(&clientAddr),
-                       &addrLen);
+    int newFd = accept(listenerFd, reinterpret_cast<sockaddr*>(&clientAddr), &addrLen);
 
-    if (newFd == -1)
-    {
+    if (newFd == -1){
         std::cerr << "accept() failed\n";
         return;
     }
 
     addConnection(pfds, newFd);
 
-    std::cout << "pollserver: new connection from "
-              << addressToString(clientAddr)
-              << " on socket " << newFd << "\n";
+    std::cout << "pollserver: new connection from " << addressToString(clientAddr) << " on socket " << newFd << "\n";
 }
 
 // ============================================================
@@ -175,17 +158,13 @@ static void handleNewConnection(int listenerFd, std::vector<pollfd>& pfds)
 //  If recv() returns 0  → client disconnected cleanly (TCP FIN)
 //  If recv() returns -1 → socket error
 // ============================================================
-static void handleClientData(int listenerFd,
-                              std::vector<pollfd>& pfds,
-                              int& index)          // index passed by reference
-{
+static void handleClientData(int listenerFd, std::vector<pollfd>& pfds, int& index){ // index passed by reference
     char buf[BUFFER_SIZE];
     int  senderFd = pfds[index].fd;
 
     int bytesReceived = recv(senderFd, buf, sizeof buf, 0);
 
-    if (bytesReceived <= 0)
-    {
+    if (bytesReceived <= 0){
         // Client disconnected or error
         if (bytesReceived == 0)
             std::cout << "pollserver: socket " << senderFd << " hung up\n";
@@ -201,12 +180,10 @@ static void handleClientData(int listenerFd,
         return;
     }
 
-    // ── Broadcast to everyone else ───────────────────────────
-    std::cout << "pollserver: received " << bytesReceived
-              << " bytes from fd " << senderFd << "\n";
+    // broadcast to others
+    std::cout << "pollserver: received " << bytesReceived << " bytes from fd " << senderFd << "\n";
 
-    for (const pollfd& pfd : pfds)
-    {
+    for (const pollfd& pfd : pfds){
         int destFd = pfd.fd;
 
         // Skip the listener socket and the sender themselves
@@ -225,10 +202,8 @@ static void handleClientData(int listenerFd,
 //    POLLIN  → data is ready to read
 //    POLLHUP → the connection was closed on the other end
 // ============================================================
-static void processConnections(int listenerFd, std::vector<pollfd>& pfds)
-{
-    for (int i = 0; i < static_cast<int>(pfds.size()); i++)
-    {
+static void processConnections(int listenerFd, std::vector<pollfd>& pfds){
+    for (int i = 0; i < static_cast<int>(pfds.size()); i++){
         if (!(pfds[i].revents & (POLLIN | POLLHUP)))
             continue;   // nothing happened on this fd
 
@@ -242,11 +217,9 @@ static void processConnections(int listenerFd, std::vector<pollfd>& pfds)
 // ============================================================
 //  ENTRY POINT: main
 // ============================================================
-int main()
-{
+int main(){
     int listenerFd = createListenerSocket();
-    if (listenerFd == -1)
-    {
+    if (listenerFd == -1){
         std::cerr << "Failed to create listener socket. Exiting.\n";
         return 1;
     }
@@ -261,12 +234,10 @@ int main()
     // ── Main event loop ──────────────────────────────────────
     // poll() blocks here until at least one fd has activity.
     // Timeout = -1 means wait forever (no timeout).
-    while (true)
-    {
-        int eventCount = poll(pfds.data(), pfds.size(), -1 /* no timeout */);
+    while (true){
+        int eventCount = poll(pfds.data(), pfds.size(), -1);
 
-        if (eventCount == -1)
-        {
+        if (eventCount == -1){
             std::cerr << "poll() failed. Exiting.\n";
             return 1;
         }
